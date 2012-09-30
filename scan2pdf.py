@@ -9,63 +9,72 @@ import random
 import argparse
 import tempfile
 
-### files ###
+def run(cmd, **args):
+    'runs a command and reports any errors'
+    if args['verbose']:
+        print(' '.join(cmd))
+        subprocess.check_call(cmd)
+    else:
+        with open('/dev/null', 'wb') as null:
+            subprocess.check_call(cmd, stdout=null, stderr=null)
 
 def prefix(length=6):
     'generates a unique prefix for temp files'
+    script = sys.argv[0]
+    script = os.path.basename(script)
+    script = os.path.splitext(script)[0]
     prefix = [random.choice(ascii_lowercase) for n in range(length)]
-    return ''.join(prefix)
+    prefix = ''.join(prefix)
+    return '%s_%s' % (script, prefix)
 
-def path(prefix, suffix, page=None, side=None,
+def path(prefix, suffix='*', page=None, side=None,
          directory=tempfile.gettempdir()):
-    'combines path components'
+    'generates a filename with the given characteristics'
     path = [os.path.join(directory, prefix)]
-    if page:
+    if page is not None:
         path += '%.2d' % page
-    if side:
+    if side is not None:
         path += side
-    path += suffix
+    if suffix is not None:
+        path += suffix
     return ''.join(path)
 
-def name(prefix='scan', num=1):
-    'finds an available filename starting with the prefix'
-    candidate = path(prefix, '*', page=num)
-    if len(glob(candidate)) == 0:
-        return candidate
-    else:
-        return name(prefix, num+1)
+def chain(*commands, **args):
+    'chains commands together using temp file prefixes'
+    pres = [prefix() for n in range( len(commands)-1 )]
+    try:
+        commands[0](pres[0], **args)
+        for n in range(1, len(commands)-1):
+            commands[n](pres[n-1], pres[n], **args)
+        commands[-1](pres[-1], **args)
+    except:
+        raise
+    finally:
+        rm(pres, **args)
 
 def mv(in_prefix, **args):
     'moves the finished pdf to the current directory'
-    in_filenames = glob(path(in_prefix, '*'))
+    in_filenames = glob(path(in_prefix))
+    out_filename = path(args['name'], suffix='.pdf', directory='.')
     assert len(in_filenames) == 1
-    out_filename = path(args['name'], '.pdf', directory='.')
-    cmd = ['mv', in_filenames[0], out_filename]
-    if args['verbose']:
-        print(' '.join(cmd))
-    subprocess.check_call(cmd)
+    cmd = ['mv'] + in_filenames + [out_filename]
+    run(cmd, **args)
 
 def rm(prefixes, **args):
     'deletes temp files starting with any of the prefixes'
     cmd = ['rm']
     for prefix in prefixes:
-        pattern = path(prefix, '*')
+        pattern = path(prefix)
         cmd += glob(pattern)
-    if args['verbose']:
-        print(' '.join(cmd))
-    subprocess.check_call(cmd)
+    run(cmd, **args)
  
 def xdg_open(**args):
     'opens the finished pdf'
     if not args['open']:
         return
-    filename = path(args['name'], '.pdf', directory='.')
+    filename = path(args['name'], suffix='.pdf', directory='.')
     cmd = ['xdg-open', filename]
-    if args['verbose']:
-        print(' '.join(cmd))
-    subprocess.check_call(cmd)
-
-### scanning ###
+    run(cmd, **args)
 
 def scanimage(prefix, suffix='', reverse=False, **args):
     'scans images into tiff files in the current folder'
@@ -96,17 +105,15 @@ def scanimage(prefix, suffix='', reverse=False, **args):
             cmd += ['--batch-increment', '-1']
         if args['verbose']:
             cmd.append('--progress')
-            print(' '.join(cmd))
         try:
-            subprocess.check_call(cmd)
+            run(cmd, **args)
         except subprocess.CalledProcessError as e:
             if args['pages'] == -1 and e.returncode == 7:
                 # ADF out of paper
                 return
             else:
+                print(e)
                 raise
-
-### image processing ###
 
 def convert(in_prefix, out_prefix, **args):
     'makes some minor image quality enhancements'
@@ -120,9 +127,7 @@ def convert(in_prefix, out_prefix, **args):
               ]
         #if rotate:
         #    cmd += ['-rotate', '180']
-        if args['verbose']:
-            print(' '.join(cmd))
-        subprocess.check_call(cmd)
+        run(cmd, **args)
 
 def tiffcp(in_prefix, out_prefix, **args):
     'combines multiple tiff files into one'
@@ -133,10 +138,8 @@ def tiffcp(in_prefix, out_prefix, **args):
     cmd += filenames
     pattern2 = path(out_prefix, '.tif')
     cmd.append(pattern2)
-    if args['verbose']:
-        print(' '.join(cmd))
     try:
-        subprocess.check_call(cmd)
+        run(cmd, **args)
     except subprocess.CalledProcessError as e:
         if e.returncode == 1:
             return
@@ -146,87 +149,88 @@ def tiffcp(in_prefix, out_prefix, **args):
 def tiff2pdf(in_prefix, out_prefix, **args):
     'converts a tiff file to pdf'
     src = path(in_prefix, '.tif')
-    #dst = path(args['name'], '.pdf', directory='.')
     dst = path(out_prefix, '.pdf')
     cmd = [ 'tiff2pdf'
           , '-z'
           , '-o', dst
           , src
           ]
-    if args['verbose']:
-        print(' '.join(cmd))
-    subprocess.check_call(cmd)
-
-def pdfocr(in_prefix, out_prefix, **args):
-    'adds a searchable text layer to a pdf'
-    in_filename  = path(in_prefix,  '.pdf')
-    out_filename = path(out_prefix, '.pdf')
-    cmd = [ 'pdfocr'
-          , '-i', in_filename
-          , '-o', out_filename
-          ]
-    if args['verbose']:
-        print(' '.join(cmd))
-    subprocess.check_call(cmd)
+    run(cmd, **args)
 
 def pdfsandwich(in_prefix, out_prefix, **args):
     'adds a searchable text layer to a pdf'
+
+    # note existing temp files
+    start  = glob(path('cuneiform'))
+    start += glob(path('pdfsandwich'))
+
+    # run pdfsandwich
     in_filename  = path(in_prefix,  '.pdf')
     out_filename = path(out_prefix, '.pdf')
-    cmd = [ 'pdfsandwich', in_filename
-          , '-o', out_filename
-          #, '-quiet'
+    resolution = '%sx%s' % (args['resolution'], args['resolution'])
+    cmd = [ 'pdfsandwich', in_filename , '-o', out_filename
+          , '-resolution', resolution
+          , '-quiet'
           ]
-    if args['verbose']:
-        print(' '.join(cmd))
-    subprocess.check_call(cmd)
+    if args['mode'] == 'color':
+        cmd.append('-rgb')
+    run(cmd, **args)
 
-### command line ###
+    # delete any new temp files
+    end  = glob(path('cuneiform'))
+    end += glob(path('pdfsandwich'))
+    diff = [f for f in end if not f in start]
+    if len(diff) > 0:
+        cmd = ['rm', '-r'] + diff
+        run(cmd, **args)
+
+def available(prefix='scan', num=1):
+    'generates an available filename starting with the prefix'
+    candidate = path(prefix, suffix=None, page=num, directory='.')
+    if len(glob('%s*' % candidate)) == 0:
+        return candidate
+    else:
+        return available(prefix, num+1)
 
 def parse(given):
     'parses command line argments into a dict'
     expected = \
-        [ ('-n', '--name'      , {'default':name()         })
+        [ ('-n', '--name'      , {'default':'scan'         })
         , ('-s', '--source'    , {'default':'ADF'          })
-        , ('-m', '--mode'      , {'default':'Lineart'      })
+        , ('-m', '--mode'      , {'default':'color'        })
         , ('-d', '--duplex'    , {'action':'store_true'    })
         , ('-v', '--verbose'   , {'action':'store_true'    })
         , ('-o', '--open'      , {'action':'store_true'    })
         , ('-p', '--pages'     , {'type':int, 'default': -1})
-        , ('-r', '--resolution', {'type':int, 'default':200})
+        , ('-r', '--resolution', {'type':int, 'default':300})
         , ('-x', '--width'     , {'type':int, 'default':215})
         , ('-y', '--height'    , {'type':int, 'default':275})
         ]
     parser = argparse.ArgumentParser()
     for arg in expected:
         parser.add_argument(*arg[:-1], **arg[-1])
-    recognized = parser.parse_args(given)
-    return recognized.__dict__
+    parsed = parser.parse_args(given)
+    parsed.name = available(parsed.name)
+    return parsed.__dict__
 
-# TODO consistent variable names
+# TODO reasonable variable, function names
+# TODO rewrite the path and available fns so they make sense
+# TODO comments
 # TODO rotate images
 # TODO remove blank pages
-# TODO separate scan, process, and ocr steps (ocr might fail)
-# TODO ask to overwrite existing pdf
-# TODO get ocr working on arch
-# TODO use temp folders instead of prefixes
-
-def chain(*commands, **args):
-    'chains commands together using temp file prefixes'
-    pres = [prefix() for n in range( len(commands)-1 )]
-    try:
-        commands[0](pres[0], **args)
-        for n in range(1, len(commands)-1):
-            commands[n](pres[n-1], pres[n], **args)
-        commands[-1](pres[-1], **args)
-    except:
-        raise
-    finally:
-        rm(pres, **args)
+# TODO get it to work without explicit number of pages
+# TODO mv leaves old file behind (only when unnamed?)
+# TODO logical sections: meta, pipeline, interface
 
 if __name__ == '__main__':
+    cmds = \
+        [ scanimage
+        , convert
+        , tiffcp
+        , tiff2pdf
+        , pdfsandwich
+        , mv
+        ]
     args = parse(sys.argv[1:])
-    #cmds = [scanimage, convert, tiffcp, tiff2pdf, mv]
-    cmds = [scanimage, convert, tiffcp, tiff2pdf, pdfsandwich, mv]
     chain(*cmds, **args)
     xdg_open(**args)
