@@ -155,33 +155,6 @@ def tiff2pdf(in_prefix, out_prefix, **args):
           ]
     run(cmd, **args)
 
-def pdfsandwich(in_prefix, out_prefix, **args):
-    'adds a searchable text layer to a pdf'
-
-    # note existing temp files
-    start  = glob(path('cuneiform'))
-    start += glob(path('pdfsandwich'))
-
-    # run pdfsandwich
-    in_filename  = path(in_prefix,  '.pdf')
-    out_filename = path(out_prefix, '.pdf')
-    resolution = '%sx%s' % (args['resolution'], args['resolution'])
-    cmd = [ 'pdfsandwich', in_filename , '-o', out_filename
-          , '-resolution', resolution
-          , '-quiet'
-          ]
-    if args['mode'] == 'color':
-        cmd.append('-rgb')
-    run(cmd, **args)
-
-    # delete any new temp files
-    end  = glob(path('cuneiform'))
-    end += glob(path('pdfsandwich'))
-    diff = [f for f in end if not f in start]
-    if len(diff) > 0:
-        cmd = ['rm', '-r'] + diff
-        run(cmd, **args)
-
 def mv(in_prefix, **args):
     'moves the finished pdf to the current directory'
     in_filenames = glob(path(in_prefix))
@@ -230,15 +203,14 @@ def parse(given):
 # TODO clean up scans before the OCR step (remove skew, etc)
 # TODO always give the option to do duplex?
 
-if __name__ == '__main__':
+def main(args_raw):
     cmds = \
         [ scanimage
         , convert
         , tiffcp
         , tiff2pdf
-        , pdfsandwich
         , mv
         ]
-    args = parse(sys.argv[1:])
+    args = parse(args_raw)
     chain(*cmds, **args)
     xdg_open(**args)
