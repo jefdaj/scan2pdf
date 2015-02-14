@@ -9,14 +9,7 @@ import random
 import argparse
 import tempfile
 
-def run(cmd, **args):
-    'runs a command and reports any errors'
-    if args['verbose']:
-        print(' '.join(cmd))
-        subprocess.check_call(cmd)
-    else:
-        with open('/dev/null', 'wb') as null:
-            subprocess.check_call(cmd, stdout=null, stderr=null)
+### temp file management ###
 
 def prefix(length=6):
     'generates a unique prefix for temp files'
@@ -26,6 +19,14 @@ def prefix(length=6):
     prefix = [random.choice(ascii_lowercase) for n in range(length)]
     prefix = ''.join(prefix)
     return '%s_%s' % (script, prefix)
+
+def available(prefix='scan', num=1):
+    'generates an available filename starting with the prefix'
+    candidate = path(prefix, suffix=None, page=num, directory='.')
+    if len(glob('%s*' % candidate)) == 0:
+        return candidate
+    else:
+        return available(prefix, num+1)
 
 def path(prefix, suffix='*', page=None, side=None,
          directory=tempfile.gettempdir()):
@@ -38,6 +39,25 @@ def path(prefix, suffix='*', page=None, side=None,
     if suffix is not None:
         path += suffix
     return ''.join(path)
+
+def rm(prefixes, **args):
+    'deletes temp files starting with any of the prefixes'
+    cmd = ['rm']
+    for prefix in prefixes:
+        pattern = path(prefix)
+        cmd += glob(pattern)
+    run(cmd, **args)
+ 
+### pipeline management ###
+
+def run(cmd, **args):
+    'runs a command and reports any errors'
+    if args['verbose']:
+        print(' '.join(cmd))
+        subprocess.check_call(cmd)
+    else:
+        with open('/dev/null', 'wb') as null:
+            subprocess.check_call(cmd, stdout=null, stderr=null)
 
 def chain(*commands, **args):
     'chains commands together using temp file prefixes'
@@ -52,29 +72,7 @@ def chain(*commands, **args):
     finally:
         rm(pres, **args)
 
-def mv(in_prefix, **args):
-    'moves the finished pdf to the current directory'
-    in_filenames = glob(path(in_prefix))
-    out_filename = path(args['name'], suffix='.pdf', directory='.')
-    assert len(in_filenames) == 1
-    cmd = ['mv'] + in_filenames + [out_filename]
-    run(cmd, **args)
-
-def rm(prefixes, **args):
-    'deletes temp files starting with any of the prefixes'
-    cmd = ['rm']
-    for prefix in prefixes:
-        pattern = path(prefix)
-        cmd += glob(pattern)
-    run(cmd, **args)
- 
-def xdg_open(**args):
-    'opens the finished pdf'
-    if not args['open']:
-        return
-    filename = path(args['name'], suffix='.pdf', directory='.')
-    cmd = ['xdg-open', filename]
-    run(cmd, **args)
+### pipeline commands ###
 
 def scanimage(prefix, suffix='', reverse=False, **args):
     'scans images into tiff files in the current folder'
@@ -82,7 +80,7 @@ def scanimage(prefix, suffix='', reverse=False, **args):
         # scan twice, naming files so they alternate
         args['duplex'] = False
         scanimage(prefix, suffix='a', reverse=False, **args)
-        input('Put papers in upside down and press ENTER')
+        input('Put papers back upside down and press ENTER')
         pattern = path(prefix, '*.tif')
         args['pages'] = len(glob(pattern))
         scanimage(prefix, suffix='b', reverse=True, **args)
@@ -184,13 +182,23 @@ def pdfsandwich(in_prefix, out_prefix, **args):
         cmd = ['rm', '-r'] + diff
         run(cmd, **args)
 
-def available(prefix='scan', num=1):
-    'generates an available filename starting with the prefix'
-    candidate = path(prefix, suffix=None, page=num, directory='.')
-    if len(glob('%s*' % candidate)) == 0:
-        return candidate
-    else:
-        return available(prefix, num+1)
+def mv(in_prefix, **args):
+    'moves the finished pdf to the current directory'
+    in_filenames = glob(path(in_prefix))
+    out_filename = path(args['name'], suffix='.pdf', directory='.')
+    assert len(in_filenames) == 1
+    cmd = ['mv'] + in_filenames + [out_filename]
+    run(cmd, **args)
+
+def xdg_open(**args):
+    'opens the finished pdf'
+    if not args['open']:
+        return
+    filename = path(args['name'], suffix='.pdf', directory='.')
+    cmd = ['xdg-open', filename]
+    run(cmd, **args)
+
+### command line interface ###
 
 def parse(given):
     'parses command line argments into a dict'
@@ -219,8 +227,8 @@ def parse(given):
 # TODO rotate images
 # TODO remove blank pages
 # TODO get it to work without explicit number of pages
-# TODO mv leaves old file behind (only when unnamed?)
-# TODO logical sections: meta, pipeline, interface
+# TODO clean up scans before the OCR step (remove skew, etc)
+# TODO always give the option to do duplex?
 
 if __name__ == '__main__':
     cmds = \
