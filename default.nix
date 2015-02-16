@@ -1,12 +1,12 @@
-let
-  inherit (import <nixpkgs> {}) pkgs;
+let inherit (import <nixpkgs> {}) pkgs;
 
 in pkgs.python27Packages.buildPythonPackage {
   name = "scan2pdf"; # TODO rename to avoid conflict with gscan2pdf?
   src = ./.;
   buildInputs = with pkgs; [
     imagemagick
-    libtiff
+    netpbm
+    saneBackends
   ];
   meta = {
     license = pkgs.stdenv.lib.licenses.gpl3; # TODO check dependencies

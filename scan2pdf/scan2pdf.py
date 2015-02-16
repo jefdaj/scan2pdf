@@ -52,12 +52,15 @@ def rm(prefixes, **args):
 
 def run(cmd, **args):
     'runs a command and reports any errors'
-    if args['verbose']:
-        print(' '.join(cmd))
-        subprocess.check_call(cmd)
-    else:
-        with open('/dev/null', 'wb') as null:
-            subprocess.check_call(cmd, stdout=null, stderr=null)
+    try:
+        if args['verbose']:
+            print(' '.join(cmd))
+            subprocess.check_call(cmd)
+        else:
+            with open('/dev/null', 'wb') as null:
+                subprocess.check_call(cmd, stdout=null, stderr=null)
+    except subprocess.CalledProcessError:
+        print('ERROR: %s' % ' '.join(cmd))
 
 def chain(*commands, **args):
     'chains commands together using temp file prefixes'
@@ -113,47 +116,63 @@ def scanimage(prefix, suffix='', reverse=False, **args):
                 print(e)
                 raise
 
-def convert(in_prefix, out_prefix, **args):
-    'makes some minor image quality enhancements'
-    pattern = path(in_prefix, '*.tif')
-    for filename in glob(pattern):
-        cmd = [ 'convert'
-              , filename
-              , '-level', '15%,85%'
-              , '-depth', '2'
-              , filename.replace(in_prefix, out_prefix)
-              ]
-        #if rotate:
-        #    cmd += ['-rotate', '180']
-        run(cmd, **args)
+# def convert(in_prefix, out_prefix, **args):
+#     'makes some minor image quality enhancements'
+#     pattern = path(in_prefix, '*.tif')
+#     for filename in glob(pattern):
+#         cmd = [ 'convert'
+#               , filename
+#               , '-level', '15%,85%'
+#               , '-depth', '2'
+#               , filename.replace(in_prefix, out_prefix)
+#               ]
+#         #if rotate:
+#         #    cmd += ['-rotate', '180']
+#         run(cmd, **args)
 
-def tiffcp(in_prefix, out_prefix, **args):
-    'combines multiple tiff files into one'
-    cmd = ['tiffcp']
-    pattern = path(in_prefix, '*.tif')
-    filenames = glob(pattern)
-    filenames.sort()
-    cmd += filenames
-    pattern2 = path(out_prefix, '.tif')
-    cmd.append(pattern2)
-    try:
-        run(cmd, **args)
-    except subprocess.CalledProcessError as e:
-        if e.returncode == 1:
-            return
-        else:
-            raise
+# TODO:
+# I've found that scanadf from sane-frontends has the same truncation
+# problem, but I've found that running the PNMs created by scanimage
+# or scanadf through "pamfixtrunc" from netpbm will fix the truncation
+# issue, but I'd still like to figure out how to prevent the problem,
+# if possible.
 
-def tiff2pdf(in_prefix, out_prefix, **args):
-    'converts a tiff file to pdf'
-    src = path(in_prefix, '.tif')
-    dst = path(out_prefix, '.pdf')
-    cmd = [ 'tiff2pdf'
-          , '-z'
-          , '-o', dst
-          , src
-          ]
-    run(cmd, **args)
+# def pamfix(in_prefix, out_prefix, **args):
+    # TODO try converting tiff -> pnm, fixing, and converting back
+    # that way the prefixes are easy at each step
+    # TODO or just use pnm all the way. no downside.
+    # pattern = path(in_prefix, '*.pnm
+    # cmd = [ 'pamfix'
+    #       , '-truncate'
+    #       ]
+
+# def tiffcp(in_prefix, out_prefix, **args):
+#     'combines multiple tiff files into one'
+#     cmd = ['tiffcp']
+#     pattern = path(in_prefix, '*.tif')
+#     filenames = glob(pattern)
+#     filenames.sort()
+#     cmd += filenames
+#     pattern2 = path(out_prefix, '.tif')
+#     cmd.append(pattern2)
+#     try:
+#         run(cmd, **args)
+#     except subprocess.CalledProcessError as e:
+#         if e.returncode == 1:
+#             return
+#         else:
+#             raise
+
+# def tiff2pdf(in_prefix, out_prefix, **args):
+#     'converts a tiff file to pdf'
+#     src = path(in_prefix, '.tif')
+#     dst = path(out_prefix, '.pdf')
+#     cmd = [ 'tiff2pdf'
+#           , '-z'
+#           , '-o', dst
+#           , src
+#           ]
+#     run(cmd, **args)
 
 def mv(in_prefix, **args):
     'moves the finished pdf to the current directory'
@@ -206,9 +225,9 @@ def parse(given):
 def main(args_raw):
     cmds = \
         [ scanimage
-        , convert
-        , tiffcp
-        , tiff2pdf
+        # , convert
+        # , tiffcp
+        # , tiff2pdf
         , mv
         ]
     args = parse(args_raw)
