@@ -128,7 +128,6 @@ def pamfix(in_prefix, out_prefix, **args):
 
 def convert(in_prefix, out_prefix, **args):
     'combines multiple pnm files into a pdf'
-    # TODO add a command line flag for additional rotation (if easy)
     infiles = sorted(glob(path(in_prefix, '*.pnm')))
     outfile = path(out_prefix, '.pdf')
     cmd = ['convert']
@@ -175,20 +174,6 @@ def parse(given):
     parsed = parser.parse_args(given)
     parsed.name = available(parsed.name)
     return parsed.__dict__
-
-# TODO reasonable variable, function names
-# TODO rewrite the path and available fns so they make sense
-# TODO comments
-# TODO rotate images
-# TODO remove blank pages
-# TODO get it to work without explicit number of pages
-# TODO clean up scans before the OCR step (remove skew, etc)
-# TODO always give the option to do duplex?
-# TODO what were these for? should I keep them?
-# , '-level', '15%,85%'
-# , '-depth', '2'
-# TODO get it to stop with the 01 suffix
-# TODO move xdg-open into the cmds chain too
 
 def main(args_raw):
     cmds = [scanimage, pamfix, convert, mv]
