@@ -8,5 +8,5 @@ setup(
   license      = 'GPL3', # TODO check dependencies
   name         = 'scan2pdf',
   packages     = ['scan2pdf'],
-  version      = '0.1.1',
+  version      = '0.2',
 )

@@ -1,15 +1,25 @@
-let inherit (import <nixpkgs> {}) pkgs;
+{ stdenv
+, buildPythonPackage
+, fetchgit
+, imagemagick
+, netpbm
+, python3
+, saneBackends
+}:
 
-in pkgs.python27Packages.buildPythonPackage {
-  name = "scan2pdf"; # TODO rename to avoid conflict with gscan2pdf?
+buildPythonPackage rec {
+  version = "0.2";
+  name = "scan2pdf-${version}";
   src = ./.;
-  buildInputs = with pkgs; [
+  buildPrefix = "";
+  buildInputs = [ 
     imagemagick
     netpbm
+    python3
     saneBackends
   ];
   meta = {
-    license = pkgs.stdenv.lib.licenses.gpl3; # TODO check dependencies
+    homepage = "https://github.com/jefdaj/scan2pdf";
+    description = "A script to automate scanning documents.";
   };
-  doCheck = false;
 }
